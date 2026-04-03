@@ -33,9 +33,7 @@ class Main:
             game.show_moves(screen)
             game.show_pieces(screen)
             game.show_hover(screen)
-            game.show_move_history(screen)
-            game.show_status_overlay(screen)
-            game.show_promotion_dialog(screen)
+            game.show_side_panel(screen)
 
             if dragger.dragging:
                 dragger.update_blit(screen)
@@ -43,10 +41,16 @@ class Main:
             for event in pygame.event.get():
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    if game.handle_navigation_click(event.pos):
+                        dragger.undrag_piece()
+                        board = game.board
+                        continue
+
                     if board.has_pending_promotion():
                         if game.handle_promotion_click(event.pos):
                             game.next_turn()
                             game.update_game_state()
+                            game.record_state(replace_current=True)
                         continue
 
                     dragger.update_mouse(event.pos)
@@ -69,12 +73,15 @@ class Main:
                             game.show_moves(screen)
                             game.show_pieces(screen)
                             game.show_hover(screen)
+                            game.show_side_panel(screen)
 
                 elif event.type == pygame.MOUSEMOTION:
                     motion_row = event.pos[1] // SQSIZE
                     motion_col = event.pos[0] // SQSIZE
                     if Square.in_range(motion_row, motion_col):
                         game.set_hover(motion_row, motion_col)
+                    else:
+                        game.hovered_sqr = None
 
                     if dragger.dragging:
                         dragger.update_mouse(event.pos)
@@ -83,6 +90,7 @@ class Main:
                         game.show_moves(screen)
                         game.show_pieces(screen)
                         game.show_hover(screen)
+                        game.show_side_panel(screen)
                         dragger.update_blit(screen)
 
                 elif event.type == pygame.MOUSEBUTTONUP:
@@ -108,14 +116,13 @@ class Main:
                                 if not board.has_pending_promotion():
                                     game.next_turn()
                                     game.update_game_state()
+                                game.record_state()
                                 # show methods
                                 game.show_bg(screen)
                                 game.show_last_move(screen)
                                 game.show_pieces(screen)
                                 game.show_hover(screen)
-                                game.show_move_history(screen)
-                                game.show_status_overlay(screen)
-                                game.show_promotion_dialog(screen)
+                                game.show_side_panel(screen)
 
                     dragger.undrag_piece()
 

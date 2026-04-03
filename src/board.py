@@ -11,6 +11,7 @@ class Board:
         self.last_move = None
         self.pending_promotion = None
         self.move_history = []
+        self.halfmove_clock = 0
         self._create()
         self._add_piece('white')
         self._add_piece('black')
@@ -224,6 +225,7 @@ class Board:
         self._reset_en_passant_flags()
 
         captured_piece = self.squares[final.row][final.col].piece
+        pawn_move = isinstance(piece, Pawn)
         is_en_passant = isinstance(piece, Pawn) and initial.col != final.col and self.squares[final.row][final.col].isempty()
         if is_en_passant:
             captured_piece = self.squares[initial.row][final.col].piece
@@ -248,6 +250,12 @@ class Board:
 
         notation = self._build_move_notation(piece, initial, final, captured_piece is not None, is_castling, is_en_passant, promotion_pending)
         self.move_history.append(notation)
+
+        if pawn_move or captured_piece is not None:
+            self.halfmove_clock = 0
+        else:
+            self.halfmove_clock += 1
+
         if promotion_pending:
             self.pending_promotion = {
                 'row': final.row,
@@ -485,6 +493,111 @@ class Board:
                         return row, col
 
         return None, None
+
+    def is_insufficient_material(self):
+        white_minors = []
+        black_minors = []
+        white_other = []
+        black_other = []
+
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if not square.has_piece():
+                    continue
+
+                piece = square.piece
+                if isinstance(piece, King):
+                    continue
+
+                is_minor = isinstance(piece, (Bishop, Knight))
+                target_minor_list = white_minors if piece.color == 'white' else black_minors
+                target_other_list = white_other if piece.color == 'white' else black_other
+
+                if is_minor:
+                    target_minor_list.append((piece, row, col))
+                else:
+                    target_other_list.append(piece)
+
+        if white_other or black_other:
+            return False
+
+        white_minor_count = len(white_minors)
+        black_minor_count = len(black_minors)
+
+        if white_minor_count == 0 and black_minor_count == 0:
+            return True
+
+        if white_minor_count == 1 and black_minor_count == 0:
+            return True
+
+        if white_minor_count == 0 and black_minor_count == 1:
+            return True
+
+        if white_minor_count == 1 and black_minor_count == 1:
+            white_piece, white_row, white_col = white_minors[0]
+            black_piece, black_row, black_col = black_minors[0]
+            if isinstance(white_piece, Bishop) and isinstance(black_piece, Bishop):
+                white_square_color = (white_row + white_col) % 2
+                black_square_color = (black_row + black_col) % 2
+                return white_square_color == black_square_color
+
+        return False
+
+    def get_position_key(self, turn_color):
+        board_rows = []
+        for row in range(ROWS):
+            row_tokens = []
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if not square.has_piece():
+                    row_tokens.append('--')
+                    continue
+
+                piece = square.piece
+                symbol = piece.name[0].upper()
+                if piece.name == 'knight':
+                    symbol = 'N'
+                color_symbol = 'w' if piece.color == 'white' else 'b'
+                row_tokens.append(f'{color_symbol}{symbol}')
+            board_rows.append(','.join(row_tokens))
+
+        castling = []
+        white_king = self.squares[7][4].piece
+        black_king = self.squares[0][4].piece
+
+        if isinstance(white_king, King) and not white_king.moved:
+            w_rook_h = self.squares[7][7].piece
+            w_rook_a = self.squares[7][0].piece
+            if isinstance(w_rook_h, Rook) and not w_rook_h.moved:
+                castling.append('K')
+            if isinstance(w_rook_a, Rook) and not w_rook_a.moved:
+                castling.append('Q')
+
+        if isinstance(black_king, King) and not black_king.moved:
+            b_rook_h = self.squares[0][7].piece
+            b_rook_a = self.squares[0][0].piece
+            if isinstance(b_rook_h, Rook) and not b_rook_h.moved:
+                castling.append('k')
+            if isinstance(b_rook_a, Rook) and not b_rook_a.moved:
+                castling.append('q')
+
+        castling_key = ''.join(castling) if castling else '-'
+
+        en_passant_tokens = []
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if square.has_piece() and isinstance(square.piece, Pawn) and square.piece.en_passant:
+                    en_passant_tokens.append(f'{square.piece.color[0]}{row}{col}')
+        en_passant_key = ','.join(en_passant_tokens) if en_passant_tokens else '-'
+
+        return '|'.join([
+            '/'.join(board_rows),
+            turn_color,
+            castling_key,
+            en_passant_key
+        ])
 
     def valid_move(self, piece, move):
         return move in piece.moves

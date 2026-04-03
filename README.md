@@ -19,7 +19,7 @@
 - Pawn promotion selection dialog (Queen, Rook, Bishop, Knight)
 - Last-move highlight and square hover outline
 - Board coordinates on all themes
-- In-game status overlay and move history panel
+- Dedicated right-side panel for status, promotion choices, game-end message, and move history
 
 # Game Snapshots
 

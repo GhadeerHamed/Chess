@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import pygame
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 SRC = os.path.join(ROOT, 'src')
@@ -8,8 +9,9 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 from board import Board
+from game import Game
 from move import Move
-from piece import King, Pawn, Queen, Rook
+from piece import Bishop, King, Knight, Pawn, Queen, Rook
 from square import Square
 
 
@@ -117,6 +119,118 @@ class TestChessRules(unittest.TestCase):
             if move.final.row == 6 and move.final.col == 5
         ]
         self.assertEqual(illegal_sideways, [])
+
+    def test_insufficient_material_kings_only(self):
+        board = Board()
+        board._create()
+        board.squares[7][4].piece = King('white')
+        board.squares[0][4].piece = King('black')
+
+        self.assertTrue(board.is_insufficient_material())
+
+    def test_insufficient_material_bishop_same_color(self):
+        board = Board()
+        board._create()
+        board.squares[7][4].piece = King('white')
+        board.squares[0][4].piece = King('black')
+        board.squares[4][4].piece = Bishop('white')
+        board.squares[2][2].piece = Bishop('black')
+
+        self.assertTrue(board.is_insufficient_material())
+
+    def test_fifty_move_counter_advances_on_non_pawn_non_capture(self):
+        board = Board()
+        board._create()
+        board.squares[7][4].piece = King('white')
+        board.squares[0][4].piece = King('black')
+        rook = Rook('white')
+        board.squares[6][0].piece = rook
+
+        move = Move(Square(6, 0), Square(5, 0))
+        board.move(rook, move)
+
+        self.assertEqual(board.halfmove_clock, 1)
+
+    def test_threefold_repetition_draw_detection(self):
+        pygame.init()
+        game = Game()
+        board = game.board
+
+        board._create()
+        board.squares[7][4].piece = King('white')
+        board.squares[0][4].piece = King('black')
+        white_knight = Knight('white')
+        black_knight = Knight('black')
+        board.squares[7][1].piece = white_knight
+        board.squares[0][1].piece = black_knight
+
+        game.next_player = 'white'
+        game.position_counts = {}
+        game._record_position()
+
+        sequence = [
+            ((7, 1), (5, 2)),
+            ((0, 1), (2, 2)),
+            ((5, 2), (7, 1)),
+            ((2, 2), (0, 1)),
+            ((7, 1), (5, 2)),
+            ((0, 1), (2, 2)),
+            ((5, 2), (7, 1)),
+            ((2, 2), (0, 1)),
+        ]
+
+        for (fr, fc), (tr, tc) in sequence:
+            piece = board.squares[fr][fc].piece
+            move = Move(Square(fr, fc), Square(tr, tc))
+            board.move(piece, move)
+            game.next_turn()
+            game.update_game_state()
+
+        self.assertTrue(game.game_over)
+        self.assertEqual(game.result_text, 'Draw - Threefold repetition')
+        pygame.quit()
+
+    def test_undo_redo_and_branching(self):
+        pygame.init()
+        game = Game()
+        board = game.board
+
+        pawn_e = board.squares[6][4].piece
+        move_e4 = Move(Square(6, 4), Square(4, 4))
+        board.move(pawn_e, move_e4)
+        game.next_turn()
+        game.update_game_state()
+        game.record_state()
+
+        self.assertTrue(game.can_undo())
+        self.assertFalse(game.can_redo())
+        self.assertIs(board.squares[4][4].piece, pawn_e)
+        self.assertEqual(game.next_player, 'black')
+
+        self.assertTrue(game.undo())
+        board = game.board
+        self.assertIsNone(board.squares[4][4].piece)
+        self.assertEqual(board.squares[6][4].piece.name, 'pawn')
+        self.assertEqual(game.next_player, 'white')
+        self.assertTrue(game.can_redo())
+
+        self.assertTrue(game.redo())
+        board = game.board
+        self.assertEqual(board.squares[4][4].piece.name, 'pawn')
+        self.assertEqual(game.next_player, 'black')
+
+        self.assertTrue(game.undo())
+        board = game.board
+        pawn_d = board.squares[6][3].piece
+        move_d4 = Move(Square(6, 3), Square(4, 3))
+        board.move(pawn_d, move_d4)
+        game.next_turn()
+        game.update_game_state()
+        game.record_state()
+
+        self.assertFalse(game.can_redo())
+        self.assertEqual(game.board.squares[4][3].piece.name, 'pawn')
+        pygame.quit()
 
 
 if __name__ == '__main__':
