@@ -11,6 +11,7 @@ if SRC not in sys.path:
 from board import Board
 from game import Game
 from move import Move
+from ai import AI
 from piece import Bishop, King, Knight, Pawn, Queen, Rook
 from square import Square
 
@@ -230,6 +231,30 @@ class TestChessRules(unittest.TestCase):
 
         self.assertFalse(game.can_redo())
         self.assertEqual(game.board.squares[4][3].piece.name, 'pawn')
+        pygame.quit()
+
+    def test_ai_chooses_legal_move(self):
+        board = Board()
+        ai = AI('black')
+
+        choice = ai.choose_move(board)
+        self.assertIsNotNone(choice)
+
+        piece, move = choice
+        self.assertEqual(piece.color, 'black')
+        self.assertTrue(board.valid_move(piece, move))
+
+    def test_game_ai_turn_executes_move(self):
+        pygame.init()
+        game = Game()
+        game.vs_ai = True
+        game.next_player = 'black'
+
+        before_moves = len(game.board.move_history)
+        game.make_ai_move()
+
+        self.assertEqual(game.next_player, 'white')
+        self.assertEqual(len(game.board.move_history), before_moves + 1)
         pygame.quit()
 
 

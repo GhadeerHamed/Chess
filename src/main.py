@@ -21,6 +21,10 @@ class Main:
         board = game.board
 
         while True:
+            if game.should_make_ai_move() and not dragger.dragging:
+                game.make_ai_move()
+                board = game.board
+
             if game.game_over:
                 pygame.display.set_caption(f'Chess - {game.result_text} (Press R to restart)')
             elif board.has_pending_promotion():
@@ -64,7 +68,8 @@ class Main:
                     # If square has a piece
                     if Square.in_range(clicked_row, clicked_col) and board.squares[clicked_row][clicked_col].has_piece():
                         piece = board.squares[clicked_row][clicked_col].piece
-                        if (not game.game_over) and (not board.has_pending_promotion()) and piece.color == game.next_player:
+                        human_can_play_piece = (not game.vs_ai) or (piece.color == game.human_color)
+                        if (not game.game_over) and (not board.has_pending_promotion()) and piece.color == game.next_player and human_can_play_piece:
                             board.calc_moves(piece, clicked_row, clicked_col)
                             dragger.save_initial(event.pos)
                             dragger.drag_piece(piece)
@@ -138,6 +143,8 @@ class Main:
 
                     if event.key == pygame.K_t:
                         game.change_theme()
+                    if event.key == pygame.K_c:
+                        game.toggle_ai_mode()
                     if event.key == pygame.K_r:
                         game.reset()
                         game = self.game

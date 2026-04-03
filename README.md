@@ -5,6 +5,7 @@
 * Install dependency: `py -m pip install pygame`
 * Run game: `py src/main.py`
 * Press 't' to change theme (green, brown, blue, gray)
+* Press 'c' to toggle Computer mode (ON by default)
 * Press 'r' to restart the game
 * On pawn promotion, click a piece in the dialog or press Q / R / B / N
 * Run tests: `py -m unittest discover -s tests -v`
@@ -20,6 +21,7 @@
 - Last-move highlight and square hover outline
 - Board coordinates on all themes
 - Dedicated right-side panel for status, promotion choices, game-end message, and move history
+- Play against computer (computer plays black in AI mode)
 
 # Game Snapshots
 

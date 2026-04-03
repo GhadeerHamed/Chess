@@ -412,6 +412,17 @@ class Board:
                         return True
         return False
 
+    def get_all_legal_moves(self, color):
+        moves = []
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.squares[row][col].has_team_piece(color):
+                    piece = self.squares[row][col].piece
+                    self.calc_moves(piece, row, col)
+                    for move in piece.moves:
+                        moves.append((piece, move, row, col))
+        return moves
+
     def is_square_attacked(self, target_row, target_col, by_color):
         for row in range(ROWS):
             for col in range(COLS):

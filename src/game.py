@@ -6,6 +6,7 @@ from board import Board
 from dragger import Dragger
 from config import Config
 from square import Square
+from ai import AI
 
 class Game:
 
@@ -21,6 +22,10 @@ class Game:
         self.promotion_buttons = {}
         self.position_counts = {}
         self.nav_buttons = {}
+        self.vs_ai = True
+        self.human_color = 'white'
+        self.ai_color = 'black'
+        self.ai = AI(self.ai_color)
         self.state_history = []
         self.state_index = -1
         self._record_position()
@@ -171,7 +176,8 @@ class Game:
         pygame.draw.rect(surface, (26, 28, 32), (panel_x, 0, panel_w, HEIGHT))
         pygame.draw.line(surface, (70, 74, 84), (panel_x, 0), (panel_x, HEIGHT), 2)
 
-        title = self.config.font.render('Chess', True, (236, 236, 236))
+        title_text = 'Chess vs CPU' if self.vs_ai else 'Chess Local'
+        title = self.config.font.render(title_text, True, (236, 236, 236))
         surface.blit(title, (panel_x + 14, 12))
 
         self._draw_status_card(surface, panel_x + 12, 44, panel_w - 24, 92)
@@ -331,6 +337,44 @@ class Game:
 
     def next_turn(self):
         self.next_player = 'white' if self.next_player == 'black' else 'black'
+
+    def should_make_ai_move(self):
+        if not self.vs_ai:
+            return False
+
+        if self.game_over or self.board.has_pending_promotion():
+            return False
+
+        return self.next_player == self.ai_color
+
+    def make_ai_move(self):
+        choice = self.ai.choose_move(self.board)
+        if not choice:
+            self.update_game_state()
+            self.record_state()
+            return
+
+        piece, move = choice
+        initial = move.initial
+        final = move.final
+        is_en_passant_capture = (
+            piece.name == 'pawn' and
+            initial.col != final.col and
+            self.board.squares[final.row][final.col].isempty()
+        )
+        captured = self.board.squares[final.row][final.col].has_enemy_piece(piece.color) or is_en_passant_capture
+
+        self.board.move(piece, move)
+        if self.board.has_pending_promotion():
+            self.board.promote_pawn('q')
+
+        self.play_sound(captured)
+        self.next_turn()
+        self.update_game_state()
+        self.record_state()
+
+    def toggle_ai_mode(self):
+        self.vs_ai = not self.vs_ai
 
     def update_game_state(self):
         self._record_position()
