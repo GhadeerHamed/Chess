@@ -494,6 +494,9 @@ class Board:
 
         return None, None
 
+    def get_king_position(self, color):
+        return self._find_king(color)
+
     def is_insufficient_material(self):
         white_minors = []
         black_minors = []

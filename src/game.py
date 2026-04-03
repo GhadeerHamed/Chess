@@ -139,6 +139,22 @@ class Game:
                 rect = (pos.col * SQSIZE, pos.row * SQSIZE, SQSIZE, SQSIZE)
                 pygame.draw.rect(surface, color, rect)
 
+    def show_check(self, surface):
+        for color in ['white', 'black']:
+            if not self.board.is_in_check(color):
+                continue
+
+            row, col = self.board.get_king_position(color)
+            if row is None:
+                continue
+
+            rect = pygame.Rect(col * SQSIZE, row * SQSIZE, SQSIZE, SQSIZE)
+
+            highlight = pygame.Surface((SQSIZE, SQSIZE), pygame.SRCALPHA)
+            highlight.fill((220, 30, 30, 95))
+            surface.blit(highlight, rect.topleft)
+            pygame.draw.rect(surface, (170, 10, 10), rect, width=4)
+
     def show_hover(self, surface):
         if self.hovered_sqr:
             color = (180, 180, 180)

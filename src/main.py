@@ -30,6 +30,7 @@ class Main:
 
             game.show_bg(screen)
             game.show_last_move(screen)
+            game.show_check(screen)
             game.show_moves(screen)
             game.show_pieces(screen)
             game.show_hover(screen)
@@ -70,6 +71,7 @@ class Main:
                             # show methods
                             game.show_bg(screen)
                             game.show_last_move(screen)
+                            game.show_check(screen)
                             game.show_moves(screen)
                             game.show_pieces(screen)
                             game.show_hover(screen)
@@ -87,6 +89,7 @@ class Main:
                         dragger.update_mouse(event.pos)
                         game.show_bg(screen)
                         game.show_last_move(screen)
+                        game.show_check(screen)
                         game.show_moves(screen)
                         game.show_pieces(screen)
                         game.show_hover(screen)
@@ -120,6 +123,7 @@ class Main:
                                 # show methods
                                 game.show_bg(screen)
                                 game.show_last_move(screen)
+                                game.show_check(screen)
                                 game.show_pieces(screen)
                                 game.show_hover(screen)
                                 game.show_side_panel(screen)
