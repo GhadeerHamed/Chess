@@ -48,6 +48,19 @@ class Board:
                         move = Move(initial, final)
                         piece.add_move(move)
 
+            # en passant moves
+            en_passant_row = 3 if piece.color == 'white' else 4
+            if row == en_passant_row:
+                for adjacent_col in [col - 1, col + 1]:
+                    if Square.in_range(adjacent_col):
+                        adjacent_square = self.squares[row][adjacent_col]
+                        if adjacent_square.has_enemy_piece(piece.color) and isinstance(adjacent_square.piece, Pawn):
+                            if adjacent_square.piece.en_passant:
+                                initial = Square(row, col)
+                                final = Square(row + piece.dir, adjacent_col)
+                                move = Move(initial, final)
+                                piece.add_move(move)
+
         def knight_moves():
             possible_moves = [
                 (row-2, col+1),
@@ -134,6 +147,34 @@ class Board:
                         piece.add_move(move)
 
             # Castling moves
+            if piece.moved or self.is_in_check(piece.color):
+                return
+
+            enemy_color = 'black' if piece.color == 'white' else 'white'
+
+            # Kingside castling
+            right_rook_square = self.squares[row][7]
+            if right_rook_square.has_team_piece(piece.color) and isinstance(right_rook_square.piece, Rook):
+                right_rook = right_rook_square.piece
+                if not right_rook.moved:
+                    if self.squares[row][5].isempty() and self.squares[row][6].isempty():
+                        if not self.is_square_attacked(row, 5, enemy_color) and not self.is_square_attacked(row, 6, enemy_color):
+                            initial = Square(row, col)
+                            final = Square(row, col + 2)
+                            move = Move(initial, final)
+                            piece.add_move(move)
+
+            # Queenside castling
+            left_rook_square = self.squares[row][0]
+            if left_rook_square.has_team_piece(piece.color) and isinstance(left_rook_square.piece, Rook):
+                left_rook = left_rook_square.piece
+                if not left_rook.moved:
+                    if self.squares[row][1].isempty() and self.squares[row][2].isempty() and self.squares[row][3].isempty():
+                        if not self.is_square_attacked(row, 3, enemy_color) and not self.is_square_attacked(row, 2, enemy_color):
+                            initial = Square(row, col)
+                            final = Square(row, col - 2)
+                            move = Move(initial, final)
+                            piece.add_move(move)
 
         if isinstance(piece, Pawn):
             pawn_moves()
@@ -178,12 +219,24 @@ class Board:
         initial = move.initial
         final = move.final
 
+        self._reset_en_passant_flags()
+
+        is_en_passant = isinstance(piece, Pawn) and initial.col != final.col and self.squares[final.row][final.col].isempty()
+        if is_en_passant:
+            self.squares[initial.row][final.col].piece = None
+
         # console board move update
         self.squares[initial.row][initial.col].piece = None
         self.squares[final.row][final.col].piece = piece
+
+        if isinstance(piece, King) and abs(final.col - initial.col) == 2:
+            self._move_castling_rook(initial.row, initial.col, final.col)
+
         piece.moved = True
 
         if isinstance(piece, Pawn):
+            if abs(final.row - initial.row) == 2:
+                piece.en_passant = True
             self._check_promotion(piece, final)
 
         # clear valid moves
@@ -196,21 +249,68 @@ class Board:
         if final.row == 0 or final.row == 7:
             self.squares[final.row][final.col].piece = Queen(piece.color)
 
+    def _reset_en_passant_flags(self):
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.squares[row][col].has_piece() and isinstance(self.squares[row][col].piece, Pawn):
+                    self.squares[row][col].piece.en_passant = False
+
+    def _move_castling_rook(self, row, initial_col, final_col):
+        if final_col > initial_col:
+            rook_initial_col = 7
+            rook_final_col = 5
+        else:
+            rook_initial_col = 0
+            rook_final_col = 3
+
+        rook = self.squares[row][rook_initial_col].piece
+        self.squares[row][rook_initial_col].piece = None
+        self.squares[row][rook_final_col].piece = rook
+        if rook:
+            rook.moved = True
+
     def in_check_after_move(self, piece: Piece, move: Move):
         initial = move.initial
         final = move.final
 
         captured_piece = self.squares[final.row][final.col].piece
         initial_moved_state = piece.moved
+        en_passant_captured_piece = None
+        rook = None
+        rook_initial_col = None
+        rook_final_col = None
+
+        is_en_passant = isinstance(piece, Pawn) and initial.col != final.col and self.squares[final.row][final.col].isempty()
+        if is_en_passant:
+            en_passant_captured_piece = self.squares[initial.row][final.col].piece
+            self.squares[initial.row][final.col].piece = None
 
         self.squares[initial.row][initial.col].piece = None
         self.squares[final.row][final.col].piece = piece
+
+        if isinstance(piece, King) and abs(final.col - initial.col) == 2:
+            if final.col > initial.col:
+                rook_initial_col = 7
+                rook_final_col = 5
+            else:
+                rook_initial_col = 0
+                rook_final_col = 3
+
+            rook = self.squares[initial.row][rook_initial_col].piece
+            self.squares[initial.row][rook_initial_col].piece = None
+            self.squares[initial.row][rook_final_col].piece = rook
+
         piece.moved = True
 
         in_check = self.is_in_check(piece.color)
 
         self.squares[initial.row][initial.col].piece = piece
         self.squares[final.row][final.col].piece = captured_piece
+        if is_en_passant:
+            self.squares[initial.row][final.col].piece = en_passant_captured_piece
+        if rook is not None:
+            self.squares[initial.row][rook_final_col].piece = None
+            self.squares[initial.row][rook_initial_col].piece = rook
         piece.moved = initial_moved_state
 
         return in_check

@@ -79,7 +79,12 @@ class Main:
                             initial = Square(dragger.initial_row, dragger.initial_col)
                             final = Square(released_row, released_col)
                             move = Move(initial, final)
-                            captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color)
+                            is_en_passant_capture = (
+                                dragger.piece.name == 'pawn' and
+                                dragger.initial_col != released_col and
+                                board.squares[released_row][released_col].isempty()
+                            )
+                            captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color) or is_en_passant_capture
                             if board.valid_move(dragger.piece, move):
                                 board.move(dragger.piece, move)
                                 game.play_sound(captured)
