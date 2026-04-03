@@ -1,6 +1,7 @@
 import pygame
 import copy
 import math
+import threading
 
 from const import *
 from board import Board
@@ -8,6 +9,7 @@ from dragger import Dragger
 from config import Config
 from square import Square
 from ai import AI
+from move import Move
 
 class Game:
 
@@ -30,6 +32,10 @@ class Game:
         self.ai_think_started_at = None
         self.ai_min_think_ms = 500
         self.ai_move_animation_ms = 220
+        self.ai_searching = False
+        self.ai_search_result = None
+        self.ai_generation = 0
+        self.ai_lock = threading.Lock()
         self.state_history = []
         self.state_index = -1
         self._record_position()
@@ -179,27 +185,31 @@ class Game:
 
         pygame.draw.rect(surface, (26, 28, 32), (panel_x, 0, panel_w, HEIGHT))
         pygame.draw.line(surface, (70, 74, 84), (panel_x, 0), (panel_x, HEIGHT), 2)
+        self._draw_eval_bar(surface, panel_x + panel_w - 16, 8, 8, HEIGHT - 16)
+
+        content_x = panel_x + 12
+        content_w = panel_w - 32
 
         title_text = 'Chess vs CPU' if self.vs_ai else 'Chess Local'
         title = self.config.font.render(title_text, True, (236, 236, 236))
         surface.blit(title, (panel_x + 14, 12))
 
-        self._draw_status_card(surface, panel_x + 12, 44, panel_w - 24, 92)
+        self._draw_status_card(surface, content_x, 44, content_w, 92)
 
         nav_y = 146
         if self.vs_ai:
-            self._draw_ai_card(surface, panel_x + 12, nav_y, panel_w - 24, 78)
+            self._draw_ai_card(surface, content_x, nav_y, content_w, 78)
             nav_y += 88
 
-        self._draw_navigation_card(surface, panel_x + 12, nav_y, panel_w - 24, 56)
+        self._draw_navigation_card(surface, content_x, nav_y, content_w, 56)
 
         promo_height = 170 if self.board.has_pending_promotion() else 66
         next_y = nav_y + 66
-        self._draw_promotion_card(surface, panel_x + 12, next_y, panel_w - 24, promo_height)
+        self._draw_promotion_card(surface, content_x, next_y, content_w, promo_height)
 
         history_y = next_y + promo_height + 12
         history_h = HEIGHT - history_y - 12
-        self._draw_history_card(surface, panel_x + 12, history_y, panel_w - 24, history_h)
+        self._draw_history_card(surface, content_x, history_y, content_w, history_h)
 
     def _draw_status_card(self, surface, x, y, w, h):
         pygame.draw.rect(surface, (44, 48, 56), (x, y, w, h), border_radius=8)
@@ -243,29 +253,51 @@ class Game:
         depth = self.ai.get_search_depth()
         score_cp_white = int(analysis.get('score_cp_white', 0))
         nodes = int(analysis.get('nodes', 0))
+        mate_for_white = analysis.get('mate_for_white')
 
         title = self.config.font.render('Engine', True, (230, 230, 230))
-        l1 = self.config.font.render(self._fit_text(f'{algorithm} d{depth}', w - 46), True, (232, 232, 232))
-        l2 = self.config.font.render(self._fit_text(f'Eval {score_cp_white:+}cp', w - 46), True, (232, 232, 232))
-        l3 = self.config.font.render(self._fit_text(f'Nodes {nodes}', w - 46), True, (198, 203, 214))
+        l1 = self.config.font.render(self._fit_text(f'{algorithm} d{depth}', w - 20), True, (232, 232, 232))
+        if mate_for_white is None:
+            eval_text = f'Eval {score_cp_white:+}cp'
+        else:
+            eval_text = f"Eval {'M' if mate_for_white > 0 else '-M'}{abs(mate_for_white)}"
+        l2 = self.config.font.render(self._fit_text(eval_text, w - 20), True, (232, 232, 232))
+        l3 = self.config.font.render(self._fit_text(f'Nodes {nodes}', w - 20), True, (198, 203, 214))
         surface.blit(title, (x + 10, y + 8))
         surface.blit(l1, (x + 10, y + 26))
         surface.blit(l2, (x + 10, y + 43))
         surface.blit(l3, (x + 10, y + 59))
 
-        # Eval-bar share from white perspective using tanh for smooth clamping.
-        bar_x = x + w - 20
-        bar_y = y + 10
-        bar_w = 10
-        bar_h = h - 20
-        pygame.draw.rect(surface, (22, 22, 22), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
-        white_share = 0.5 + 0.5 * math.tanh(score_cp_white / 400.0)
-        white_h = int(bar_h * white_share)
-        black_h = bar_h - white_h
+    def _draw_eval_bar(self, surface, x, y, w, h):
+        analysis = self.ai.get_last_analysis()
+        score_cp_white = int(analysis.get('score_cp_white', 0))
+        mate_for_white = analysis.get('mate_for_white')
+
+        if mate_for_white is None:
+            white_share = 0.5 + 0.5 * math.tanh(score_cp_white / 500.0)
+            label = f'{score_cp_white / 100.0:+.1f}'
+        else:
+            if mate_for_white > 0:
+                white_share = 0.985
+                label = f'M{abs(mate_for_white)}'
+            else:
+                white_share = 0.015
+                label = f'-M{abs(mate_for_white)}'
+
+        white_h = max(0, min(h, int(h * white_share)))
+        black_h = h - white_h
+
+        pygame.draw.rect(surface, (18, 18, 18), (x, y, w, h), border_radius=3)
         if white_h > 0:
-            pygame.draw.rect(surface, (232, 232, 232), (bar_x, bar_y, bar_w, white_h), border_top_left_radius=3, border_top_right_radius=3)
+            pygame.draw.rect(surface, (236, 236, 236), (x, y, w, white_h), border_top_left_radius=3, border_top_right_radius=3)
         if black_h > 0:
-            pygame.draw.rect(surface, (45, 45, 45), (bar_x, bar_y + white_h, bar_w, black_h), border_bottom_left_radius=3, border_bottom_right_radius=3)
+            pygame.draw.rect(surface, (40, 40, 40), (x, y + white_h, w, black_h), border_bottom_left_radius=3, border_bottom_right_radius=3)
+
+        txt = self.config.font.render(label, True, (220, 220, 220))
+        txt_rect = txt.get_rect()
+        txt_rect.right = x - 4
+        txt_rect.centery = y + h // 2
+        surface.blit(txt, txt_rect)
 
     def _draw_history_card(self, surface, x, y, w, h):
         pygame.draw.rect(surface, (44, 48, 56), (x, y, w, h), border_radius=8)
@@ -391,26 +423,78 @@ class Game:
             return False
 
         if self.next_player != self.ai_color:
+            self.ai_think_started_at = None
             return False
+
+        with self.ai_lock:
+            if self.ai_search_result is not None:
+                return True
+
+            if self.ai_searching:
+                return False
 
         if self.ai_think_started_at is None:
             self.ai_think_started_at = now_ms
             return False
 
-        return (now_ms - self.ai_think_started_at) >= self.ai_min_think_ms
+        if (now_ms - self.ai_think_started_at) >= self.ai_min_think_ms:
+            self._start_ai_search()
+
+        return False
 
     def is_ai_thinking(self):
         return self.vs_ai and self.next_player == self.ai_color and self.ai_think_started_at is not None
 
     def make_ai_move(self, surface=None):
-        choice = self.ai.choose_move(self.board)
-        if not choice:
+        with self.ai_lock:
+            result = self.ai_search_result
+            self.ai_search_result = None
+
+        if result is None:
+            descriptor = self.ai.choose_move_descriptor(self.board)
+            analysis = self.ai.get_last_analysis()
+            position_key = self.board.get_position_key(self.next_player)
+        else:
+            descriptor = result['descriptor']
+            analysis = result['analysis']
+            position_key = result['position_key']
+
+        self.ai.last_analysis = analysis
+
+        if position_key != self.board.get_position_key(self.next_player):
+            self.ai_think_started_at = pygame.time.get_ticks()
+            return
+
+        if not descriptor:
             self.update_game_state()
             self.record_state()
             self.ai_think_started_at = None
             return
 
-        piece, move = choice
+        from_row = descriptor['from_row']
+        from_col = descriptor['from_col']
+        to_row = descriptor['to_row']
+        to_col = descriptor['to_col']
+
+        if not Square.in_range(from_row, from_col, to_row, to_col):
+            self.ai_think_started_at = None
+            return
+
+        if not self.board.squares[from_row][from_col].has_piece():
+            self.ai_think_started_at = None
+            return
+
+        piece = self.board.squares[from_row][from_col].piece
+        if piece.color != self.ai_color:
+            self.ai_think_started_at = None
+            return
+
+        self.board.calc_moves(piece, from_row, from_col)
+        move = Move(Square(from_row, from_col), Square(to_row, to_col))
+        if not self.board.valid_move(piece, move):
+            self.ai_think_started_at = None
+            return
+
         if surface is not None:
             self._animate_ai_move(surface, piece, move)
 
@@ -431,6 +515,39 @@ class Game:
         self.next_turn()
         self.update_game_state()
         self.record_state()
+
+    def _start_ai_search(self):
+        with self.ai_lock:
+            if self.ai_searching:
+                return
+
+            snapshot_board = copy.deepcopy(self.board)
+            position_key = self.board.get_position_key(self.next_player)
+            generation = self.ai_generation
+            self.ai_searching = True
+
+        worker = threading.Thread(
+            target=self._ai_worker,
+            args=(snapshot_board, position_key, generation),
+            daemon=True,
+        )
+        worker.start()
+
+    def _ai_worker(self, snapshot_board, position_key, generation):
+        descriptor = self.ai.choose_move_descriptor(snapshot_board)
+        analysis = self.ai.get_last_analysis()
+
+        with self.ai_lock:
+            if generation != self.ai_generation:
+                self.ai_searching = False
+                return
+
+            self.ai_search_result = {
+                'descriptor': descriptor,
+                'analysis': analysis,
+                'position_key': position_key,
+            }
+            self.ai_searching = False
 
     def _animate_ai_move(self, surface, piece, move):
         initial = move.initial
@@ -478,7 +595,7 @@ class Game:
 
     def toggle_ai_mode(self):
         self.vs_ai = not self.vs_ai
-        self.ai_think_started_at = None
+        self._invalidate_ai_search()
 
     def cycle_ai_algorithm(self):
         names = self.ai.get_algorithms()
@@ -493,6 +610,13 @@ class Game:
         depth = self.ai.get_search_depth()
         next_depth = 1 if depth >= 3 else depth + 1
         self.ai.set_search_depth(next_depth)
+
+    def _invalidate_ai_search(self):
+        with self.ai_lock:
+            self.ai_generation += 1
+            self.ai_search_result = None
+            self.ai_searching = False
+        self.ai_think_started_at = None
 
     def update_game_state(self):
         self._record_position()
@@ -554,7 +678,7 @@ class Game:
         self.result_text = snapshot['result_text']
         self.position_counts = dict(snapshot['position_counts'])
         self.hovered_sqr = None
-        self.ai_think_started_at = None
+        self._invalidate_ai_search()
 
     def record_state(self, replace_current=False):
         snapshot = self._snapshot()

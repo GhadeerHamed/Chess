@@ -123,8 +123,14 @@ class MinimaxStrategy(AIStrategy):
 
     def __init__(self, depth=2):
         self.depth = depth
+        self.tt = {}
+        self.nodes = 0
 
     def choose(self, ai, board):
+        self.nodes = 0
+        if len(self.tt) > 200000:
+            self.tt.clear()
+
         candidates = board.get_all_legal_moves(ai.color)
         if not candidates:
             ai.last_analysis = {
@@ -133,6 +139,7 @@ class MinimaxStrategy(AIStrategy):
                 "nodes": 0,
                 "score_cp_ai": -MATE_SCORE,
                 "score_cp_white": -MATE_SCORE if ai.color == "white" else MATE_SCORE,
+                "mate_for_white": None,
             }
             return None
 
@@ -146,12 +153,11 @@ class MinimaxStrategy(AIStrategy):
         best_choice = None
         alpha = -float("inf")
         beta = float("inf")
-        nodes = 0
         opponent = ai._opponent(ai.color)
 
         for piece, move, row, col in ordered:
             sim_board = ai._simulate_move(board, row, col, move)
-            score, searched_nodes = self._minimax(
+            score = self._alphabeta(
                 ai,
                 sim_board,
                 opponent,
@@ -160,7 +166,6 @@ class MinimaxStrategy(AIStrategy):
                 beta,
                 ply=1,
             )
-            nodes += searched_nodes
 
             if best_choice is None or score > best_score:
                 best_score = score
@@ -170,26 +175,40 @@ class MinimaxStrategy(AIStrategy):
             if beta <= alpha:
                 break
 
-        ai._store_analysis(self.name, self.depth, nodes, int(best_score))
+        ai._store_analysis(self.name, self.depth, self.nodes, int(best_score))
         return best_choice
 
-    def _minimax(self, ai, board, side_to_move, depth, alpha, beta, ply):
-        nodes = 1
+    def _alphabeta(self, ai, board, side_to_move, depth, alpha, beta, ply):
+        self.nodes += 1
+
+        alpha_orig = alpha
+        beta_orig = beta
+        tt_key = f"{board.get_position_key(side_to_move)}|d{depth}|ab"
+        tt_entry = self.tt.get(tt_key)
+        if tt_entry and tt_entry["depth"] >= depth:
+            if tt_entry["flag"] == "exact":
+                return tt_entry["score"]
+            if tt_entry["flag"] == "lower":
+                alpha = max(alpha, tt_entry["score"])
+            elif tt_entry["flag"] == "upper":
+                beta = min(beta, tt_entry["score"])
+            if alpha >= beta:
+                return tt_entry["score"]
 
         legal_moves = board.get_all_legal_moves(side_to_move)
         if not legal_moves:
             if board.is_in_check(side_to_move):
                 mate_value = MATE_SCORE - ply
                 if side_to_move == ai.color:
-                    return -mate_value, nodes
-                return mate_value, nodes
-            return 0, nodes
-
-        if depth <= 0:
-            return ai._evaluate_ai_cp(board), nodes
+                    return -mate_value
+                return mate_value
+            return 0
 
         if board.halfmove_clock >= 100 or board.is_insufficient_material():
-            return 0, nodes
+            return 0
+
+        if depth <= 0:
+            return self._quiescence(ai, board, side_to_move, alpha, beta, ply)
 
         ordered = sorted(
             legal_moves,
@@ -201,7 +220,7 @@ class MinimaxStrategy(AIStrategy):
             best = -float("inf")
             for _, move, row, col in ordered:
                 sim_board = ai._simulate_move(board, row, col, move)
-                child, child_nodes = self._minimax(
+                child = self._alphabeta(
                     ai,
                     sim_board,
                     ai._opponent(side_to_move),
@@ -210,31 +229,83 @@ class MinimaxStrategy(AIStrategy):
                     beta,
                     ply + 1,
                 )
-                nodes += child_nodes
                 best = max(best, child)
                 alpha = max(alpha, best)
                 if beta <= alpha:
                     break
-            return int(best), nodes
+            score = int(best)
+        else:
+            best = float("inf")
+            for _, move, row, col in ordered:
+                sim_board = ai._simulate_move(board, row, col, move)
+                child = self._alphabeta(
+                    ai,
+                    sim_board,
+                    ai._opponent(side_to_move),
+                    depth - 1,
+                    alpha,
+                    beta,
+                    ply + 1,
+                )
+                best = min(best, child)
+                beta = min(beta, best)
+                if beta <= alpha:
+                    break
+            score = int(best)
 
-        best = float("inf")
+        if score <= alpha_orig:
+            flag = "upper"
+        elif score >= beta_orig:
+            flag = "lower"
+        else:
+            flag = "exact"
+
+        self.tt[tt_key] = {"depth": depth, "score": score, "flag": flag}
+        return score
+
+    def _quiescence(self, ai, board, side_to_move, alpha, beta, ply):
+        self.nodes += 1
+
+        stand_pat = ai._evaluate_ai_cp(board)
+        if side_to_move != ai.color:
+            stand_pat = ai._evaluate_ai_cp(board)
+
+        if side_to_move == ai.color:
+            if stand_pat >= beta:
+                return stand_pat
+            alpha = max(alpha, stand_pat)
+        else:
+            if stand_pat <= alpha:
+                return stand_pat
+            beta = min(beta, stand_pat)
+
+        moves = board.get_all_legal_moves(side_to_move)
+        capture_moves = [m for m in moves if ai._is_capture_move(board, m)]
+        ordered = sorted(capture_moves, key=lambda item: ai._move_order_key(board, item), reverse=True)
+
+        if not ordered:
+            return stand_pat
+
+        if side_to_move == ai.color:
+            best = stand_pat
+            for _, move, row, col in ordered:
+                sim_board = ai._simulate_move(board, row, col, move)
+                score = self._quiescence(ai, sim_board, ai._opponent(side_to_move), alpha, beta, ply + 1)
+                best = max(best, score)
+                alpha = max(alpha, best)
+                if alpha >= beta:
+                    break
+            return int(best)
+
+        best = stand_pat
         for _, move, row, col in ordered:
             sim_board = ai._simulate_move(board, row, col, move)
-            child, child_nodes = self._minimax(
-                ai,
-                sim_board,
-                ai._opponent(side_to_move),
-                depth - 1,
-                alpha,
-                beta,
-                ply + 1,
-            )
-            nodes += child_nodes
-            best = min(best, child)
+            score = self._quiescence(ai, sim_board, ai._opponent(side_to_move), alpha, beta, ply + 1)
+            best = min(best, score)
             beta = min(beta, best)
-            if beta <= alpha:
+            if alpha >= beta:
                 break
-        return int(best), nodes
+        return int(best)
 
 
 class AI:
@@ -247,6 +318,7 @@ class AI:
             "nodes": 0,
             "score_cp_ai": 0,
             "score_cp_white": 0,
+            "mate_for_white": None,
         }
 
         self.register_algorithm("greedy", GreedyStrategy())
@@ -284,6 +356,21 @@ class AI:
         strategy = self.algorithms[self.algorithm]
         return strategy.choose(self, board)
 
+    def choose_move_descriptor(self, board):
+        choice = self.choose_move(board)
+        if not choice:
+            return None
+
+        piece, move = choice
+        return {
+            "piece_name": piece.name,
+            "piece_color": piece.color,
+            "from_row": move.initial.row,
+            "from_col": move.initial.col,
+            "to_row": move.final.row,
+            "to_col": move.final.col,
+        }
+
     def _opponent(self, color):
         return "black" if color == "white" else "white"
 
@@ -310,15 +397,36 @@ class AI:
         score += int(center_bonus * 5)
         return score
 
+    def _is_capture_move(self, board, item):
+        piece, move, _, _ = item
+        target = board.squares[move.final.row][move.final.col]
+        if target.has_enemy_piece(piece.color):
+            return True
+
+        if piece.name == "pawn" and move.initial.col != move.final.col and target.isempty():
+            return True
+
+        return False
+
     def _store_analysis(self, algorithm, depth, nodes, score_cp_ai):
         score_cp_white = score_cp_ai if self.color == "white" else -score_cp_ai
+        mate_for_white = self._mate_for_white_from_score(score_cp_white)
         self.last_analysis = {
             "algorithm": algorithm,
             "depth": depth,
             "nodes": nodes,
             "score_cp_ai": int(score_cp_ai),
             "score_cp_white": int(score_cp_white),
+            "mate_for_white": mate_for_white,
         }
+
+    def _mate_for_white_from_score(self, score_cp_white):
+        if abs(score_cp_white) < MATE_SCORE - 2000:
+            return None
+
+        plies_to_mate = MATE_SCORE - abs(score_cp_white)
+        moves_to_mate = max(1, (plies_to_mate + 1) // 2)
+        return moves_to_mate if score_cp_white > 0 else -moves_to_mate
 
     def _evaluate_ai_cp(self, board):
         return self._evaluate_white_cp(board) if self.color == "white" else -self._evaluate_white_cp(board)
