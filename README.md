@@ -6,6 +6,7 @@
 * Run game: `py src/main.py`
 * Press 't' to change theme (green, brown, blue, gray)
 * Press 'r' to restart the game
+* On pawn promotion, click a piece in the dialog or press Q / R / B / N
 * Run tests: `py -m unittest discover -s tests -v`
 
 ## Implemented Features
@@ -15,8 +16,10 @@
 - Castling (both sides when legal)
 - En passant (including one-move eligibility)
 - Pawn promotion (auto-promote to queen)
+- Pawn promotion selection dialog (Queen, Rook, Bishop, Knight)
 - Last-move highlight and square hover outline
 - Board coordinates on all themes
+- In-game status overlay and move history panel
 
 # Game Snapshots
 

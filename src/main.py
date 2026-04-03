@@ -23,6 +23,8 @@ class Main:
         while True:
             if game.game_over:
                 pygame.display.set_caption(f'Chess - {game.result_text} (Press R to restart)')
+            elif board.has_pending_promotion():
+                pygame.display.set_caption('Chess - Promotion pending (Q/R/B/N)')
             else:
                 pygame.display.set_caption(f'Chess - {game.next_player.capitalize()} to move')
 
@@ -31,6 +33,9 @@ class Main:
             game.show_moves(screen)
             game.show_pieces(screen)
             game.show_hover(screen)
+            game.show_move_history(screen)
+            game.show_status_overlay(screen)
+            game.show_promotion_dialog(screen)
 
             if dragger.dragging:
                 dragger.update_blit(screen)
@@ -38,6 +43,12 @@ class Main:
             for event in pygame.event.get():
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    if board.has_pending_promotion():
+                        if game.handle_promotion_click(event.pos):
+                            game.next_turn()
+                            game.update_game_state()
+                        continue
+
                     dragger.update_mouse(event.pos)
                     clicked_row = dragger.mouseY // SQSIZE
                     clicked_col = dragger.mouseX // SQSIZE
@@ -46,9 +57,9 @@ class Main:
                     # print(dragger.mouseX, clicked_col)
 
                     # If square has a piece
-                    if board.squares[clicked_row][clicked_col].has_piece():
+                    if Square.in_range(clicked_row, clicked_col) and board.squares[clicked_row][clicked_col].has_piece():
                         piece = board.squares[clicked_row][clicked_col].piece
-                        if (not game.game_over) and piece.color == game.next_player:
+                        if (not game.game_over) and (not board.has_pending_promotion()) and piece.color == game.next_player:
                             board.calc_moves(piece, clicked_row, clicked_col)
                             dragger.save_initial(event.pos)
                             dragger.drag_piece(piece)
@@ -94,17 +105,26 @@ class Main:
                             if board.valid_move(dragger.piece, move):
                                 board.move(dragger.piece, move)
                                 game.play_sound(captured)
-                                game.next_turn()
-                                game.update_game_state()
+                                if not board.has_pending_promotion():
+                                    game.next_turn()
+                                    game.update_game_state()
                                 # show methods
                                 game.show_bg(screen)
                                 game.show_last_move(screen)
                                 game.show_pieces(screen)
                                 game.show_hover(screen)
+                                game.show_move_history(screen)
+                                game.show_status_overlay(screen)
+                                game.show_promotion_dialog(screen)
 
                     dragger.undrag_piece()
 
                 elif event.type == pygame.KEYDOWN:
+                    if board.has_pending_promotion() and game.handle_promotion_key(event.key):
+                        game.next_turn()
+                        game.update_game_state()
+                        continue
+
                     if event.key == pygame.K_t:
                         game.change_theme()
                     if event.key == pygame.K_r:

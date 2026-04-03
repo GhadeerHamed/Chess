@@ -17,6 +17,7 @@ class Game:
         self.dragger = Dragger()
         self.config = Config()
         self.texture_cache = {}
+        self.promotion_buttons = {}
 
     def _get_cached_texture(self, piece, size):
         piece.set_texture(size=size)
@@ -101,38 +102,108 @@ class Game:
             rect = (self.hovered_sqr.col * SQSIZE, self.hovered_sqr.row * SQSIZE, SQSIZE, SQSIZE)
             pygame.draw.rect(surface, color, rect, width=3)
 
-    # other methods
+    def show_move_history(self, surface):
+        self.show_side_panel(surface)
 
-    def next_turn(self):
-        self.next_player = 'white' if self.next_player == 'black' else 'black'
+    def show_side_panel(self, surface):
+        panel_x = BOARD_SIZE
+        panel_w = SIDE_PANEL_WIDTH
 
-    def update_game_state(self):
-        in_check = self.board.is_in_check(self.next_player)
-        has_moves = self.board.has_any_legal_move(self.next_player)
+        pygame.draw.rect(surface, (26, 28, 32), (panel_x, 0, panel_w, HEIGHT))
+        pygame.draw.line(surface, (70, 74, 84), (panel_x, 0), (panel_x, HEIGHT), 2)
 
-        if has_moves:
-            self.game_over = False
-            self.result_text = ''
+        title = self.config.font.render('Chess', True, (236, 236, 236))
+        surface.blit(title, (panel_x + 14, 12))
+
+        self._draw_status_card(surface, panel_x + 12, 44, panel_w - 24, 92)
+
+        promo_height = 170 if self.board.has_pending_promotion() else 66
+        next_y = 146
+        self._draw_promotion_card(surface, panel_x + 12, next_y, panel_w - 24, promo_height)
+
+        history_y = next_y + promo_height + 12
+        history_h = HEIGHT - history_y - 12
+        self._draw_history_card(surface, panel_x + 12, history_y, panel_w - 24, history_h)
+
+    def _draw_status_card(self, surface, x, y, w, h):
+        pygame.draw.rect(surface, (44, 48, 56), (x, y, w, h), border_radius=8)
+        pygame.draw.rect(surface, (86, 92, 106), (x, y, w, h), width=1, border_radius=8)
+
+        if self.game_over:
+            title = 'Game Over'
+            status = self.result_text
+            hint = 'Press R to restart'
+        elif self.board.has_pending_promotion():
+            title = 'Promotion'
+            status = f'{self.next_player.capitalize()} choose piece'
+            hint = 'Click choice or press Q/R/B/N'
+        else:
+            title = 'Turn'
+            status = f'{self.next_player.capitalize()} to move'
+            hint = 'In check' if self.board.is_in_check(self.next_player) else 'Board active'
+
+        title_txt = self.config.font.render(title, True, (230, 230, 230))
+        status_txt = self.config.font.render(status, True, (245, 245, 245))
+        hint_txt = self.config.font.render(hint, True, (198, 203, 214))
+        surface.blit(title_txt, (x + 10, y + 10))
+        surface.blit(status_txt, (x + 10, y + 36))
+        surface.blit(hint_txt, (x + 10, y + 60))
+
+    def _draw_history_card(self, surface, x, y, w, h):
+        pygame.draw.rect(surface, (44, 48, 56), (x, y, w, h), border_radius=8)
+        pygame.draw.rect(surface, (86, 92, 106), (x, y, w, h), width=1, border_radius=8)
+
+        title = self.config.font.render('Move History', True, (230, 230, 230))
+        surface.blit(title, (x + 10, y + 10))
+
+        available_rows = max(1, (h - 36) // 18)
+        visible_moves = self.board.move_history[-available_rows:]
+        start_idx = max(0, len(self.board.move_history) - len(visible_moves))
+
+        for idx, notation in enumerate(visible_moves):
+            ply_number = start_idx + idx + 1
+            line = f'{ply_number}. {notation}'
+            text = self.config.font.render(line, True, (232, 232, 232))
+            surface.blit(text, (x + 10, y + 34 + idx * 18))
+
+    def _draw_promotion_card(self, surface, x, y, w, h):
+        self.promotion_buttons = {}
+        pygame.draw.rect(surface, (44, 48, 56), (x, y, w, h), border_radius=8)
+        pygame.draw.rect(surface, (86, 92, 106), (x, y, w, h), width=1, border_radius=8)
+
+        title = self.config.font.render('Promotion', True, (230, 230, 230))
+        surface.blit(title, (x + 10, y + 10))
+
+        if not self.board.has_pending_promotion():
+            info = self.config.font.render('No pending promotion', True, (198, 203, 214))
+            surface.blit(info, (x + 10, y + 34))
             return
 
-        self.game_over = True
-        if in_check:
-            winner = 'white' if self.next_player == 'black' else 'black'
-            self.result_text = f'Checkmate - {winner.capitalize()} wins'
-        else:
-            self.result_text = 'Stalemate - Draw'
+        options = [('Q', 'Queen'), ('R', 'Rook'), ('B', 'Bishop'), ('N', 'Knight')]
+        for idx, (code, label) in enumerate(options):
+            btn_x = x + 12
+            btn_y = y + 34 + idx * 31
+            btn_w = w - 24
+            btn_h = 26
+            rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+            pygame.draw.rect(surface, (205, 208, 214), rect, border_radius=5)
+            pygame.draw.rect(surface, (55, 58, 66), rect, width=1, border_radius=5)
+            txt = self.config.font.render(f'{code} - {label}', True, (26, 26, 26))
+            surface.blit(txt, (btn_x + 8, btn_y + 4))
+            self.promotion_buttons[code.lower()] = rect
 
-    def set_hover(self, row, col):
-        self.hovered_sqr = self.board.squares[row][col]
+    def handle_promotion_click(self, pos):
+        for code, rect in self.promotion_buttons.items():
+            if rect.collidepoint(pos):
+                return self.board.promote_pawn(code)
+        return False
 
-    def change_theme(self):
-        self.config.change_theme()
-
-    def play_sound(self, captured=False):
-        if captured:
-            self.config.capture_sound.play()
-        else:
-            self.config.move_sound.play()
-
-    def reset(self):
-        self.__init__()
+    def handle_promotion_key(self, key):
+        key_map = {
+            pygame.K_q: 'q',
+            pygame.K_r: 'r',
+            pygame.K_b: 'b',
+            pygame.K_n: 'n'
+        }
+        code = key_map.get(key)
+        if not cod

@@ -9,6 +9,8 @@ class Board:
     def __init__(self):
         self.squares = [[0, 0, 0, 0, 0, 0, 0, 0] for _ in range(COLS)]
         self.last_move = None
+        self.pending_promotion = None
+        self.move_history = []
         self._create()
         self._add_piece('white')
         self._add_piece('black')
@@ -221,23 +223,38 @@ class Board:
 
         self._reset_en_passant_flags()
 
+        captured_piece = self.squares[final.row][final.col].piece
         is_en_passant = isinstance(piece, Pawn) and initial.col != final.col and self.squares[final.row][final.col].isempty()
         if is_en_passant:
+            captured_piece = self.squares[initial.row][final.col].piece
             self.squares[initial.row][final.col].piece = None
 
         # console board move update
         self.squares[initial.row][initial.col].piece = None
         self.squares[final.row][final.col].piece = piece
 
+        is_castling = isinstance(piece, King) and abs(final.col - initial.col) == 2
         if isinstance(piece, King) and abs(final.col - initial.col) == 2:
             self._move_castling_rook(initial.row, initial.col, final.col)
 
         piece.moved = True
 
+        promotion_pending = False
         if isinstance(piece, Pawn):
             if abs(final.row - initial.row) == 2:
                 piece.en_passant = True
-            self._check_promotion(piece, final)
+            if self._check_promotion(final):
+                promotion_pending = True
+
+        notation = self._build_move_notation(piece, initial, final, captured_piece is not None, is_castling, is_en_passant, promotion_pending)
+        self.move_history.append(notation)
+        if promotion_pending:
+            self.pending_promotion = {
+                'row': final.row,
+                'col': final.col,
+                'color': piece.color,
+                'history_index': len(self.move_history) - 1
+            }
 
         # clear valid moves
         piece.clear_moves()
@@ -245,9 +262,63 @@ class Board:
         # Set last move
         self.last_move = move
 
-    def _check_promotion(self, piece, final):
-        if final.row == 0 or final.row == 7:
-            self.squares[final.row][final.col].piece = Queen(piece.color)
+    def has_pending_promotion(self):
+        return self.pending_promotion is not None
+
+    def promote_pawn(self, piece_name):
+        if not self.pending_promotion:
+            return False
+
+        row = self.pending_promotion['row']
+        col = self.pending_promotion['col']
+        color = self.pending_promotion['color']
+        history_index = self.pending_promotion['history_index']
+
+        promotion_map = {
+            'q': Queen,
+            'r': Rook,
+            'b': Bishop,
+            'n': Knight
+        }
+
+        selected_class = promotion_map.get(piece_name.lower())
+        if not selected_class:
+            return False
+
+        self.squares[row][col].piece = selected_class(color)
+        self.move_history[history_index] = self.move_history[history_index].replace('=?', f'={piece_name.upper()}')
+        self.pending_promotion = None
+        return True
+
+    def _check_promotion(self, final):
+        return final.row == 0 or final.row == 7
+
+    def _square_name(self, row, col):
+        return f"{Square.get_alphacol(col)}{ROWS - row}"
+
+    def _build_move_notation(self, piece, initial, final, captured, is_castling, is_en_passant, promotion_pending):
+        if is_castling:
+            return 'O-O' if final.col > initial.col else 'O-O-O'
+
+        from_sq = self._square_name(initial.row, initial.col)
+        to_sq = self._square_name(final.row, final.col)
+        sep = 'x' if captured else '-'
+
+        if isinstance(piece, Pawn):
+            notation = f'{from_sq}{sep}{to_sq}'
+        else:
+            piece_symbol = piece.name[0].upper()
+            if piece.name == 'knight':
+                piece_symbol = 'N'
+            notation = f'{piece_symbol}{from_sq}{sep}{to_sq}'
+
+        if promotion_pending:
+            notation += '=?'
+
+        if is_en_passant:
+            notation += ' e.p.'
+
+        return notation
 
     def _reset_en_passant_flags(self):
         for row in range(ROWS):

@@ -14,7 +14,7 @@ from square import Square
 
 
 class TestChessRules(unittest.TestCase):
-    def test_pawn_promotion_auto_queen(self):
+    def test_pawn_promotion_select_queen(self):
         board = Board()
         board._create()
         board.squares[7][4].piece = King('white')
@@ -26,7 +26,13 @@ class TestChessRules(unittest.TestCase):
         move = Move(Square(1, 0), Square(0, 0))
         board.move(pawn, move)
 
+        self.assertTrue(board.has_pending_promotion())
+        self.assertTrue(board.move_history[-1].endswith('=?'))
+        self.assertTrue(board.promote_pawn('q'))
+        self.assertFalse(board.has_pending_promotion())
+
         self.assertIsInstance(board.squares[0][0].piece, Queen)
+        self.assertTrue(board.move_history[-1].endswith('=Q'))
 
     def test_en_passant_generation_and_execution(self):
         board = Board()
@@ -70,6 +76,7 @@ class TestChessRules(unittest.TestCase):
         self.assertIs(board.squares[7][6].piece, king)
         self.assertIsInstance(board.squares[7][5].piece, Rook)
         self.assertIsNone(board.squares[7][7].piece)
+        self.assertEqual(board.move_history[-1], 'O-O')
 
     def test_checkmate_detection_helpers(self):
         board = Board()
