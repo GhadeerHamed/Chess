@@ -10,6 +10,8 @@ class Game:
     def __init__(self):
         self.next_player = 'white'
         self.hovered_sqr = None
+        self.game_over = False
+        self.result_text = ''
         self.board = Board()
         self.dragger = Dragger()
         self.config = Config()
@@ -107,6 +109,22 @@ class Game:
 
     def next_turn(self):
         self.next_player = 'white' if self.next_player == 'black' else 'black'
+
+    def update_game_state(self):
+        in_check = self.board.is_in_check(self.next_player)
+        has_moves = self.board.has_any_legal_move(self.next_player)
+
+        if has_moves:
+            self.game_over = False
+            self.result_text = ''
+            return
+
+        self.game_over = True
+        if in_check:
+            winner = 'white' if self.next_player == 'black' else 'black'
+            self.result_text = f'Checkmate - {winner.capitalize()} wins'
+        else:
+            self.result_text = 'Stalemate - Draw'
 
     def set_hover(self, row, col):
         self.hovered_sqr = self.board.squares[row][col]

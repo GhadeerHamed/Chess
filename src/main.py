@@ -21,6 +21,11 @@ class Main:
         board = game.board
 
         while True:
+            if game.game_over:
+                pygame.display.set_caption(f'Chess - {game.result_text} (Press R to restart)')
+            else:
+                pygame.display.set_caption(f'Chess - {game.next_player.capitalize()} to move')
+
             game.show_bg(screen)
             game.show_moves(screen)
             game.show_pieces(screen)
@@ -41,7 +46,7 @@ class Main:
                     # If square has a piece
                     if board.squares[clicked_row][clicked_col].has_piece():
                         piece = board.squares[clicked_row][clicked_col].piece
-                        if piece.color == game.next_player:
+                        if (not game.game_over) and piece.color == game.next_player:
                             board.calc_moves(piece, clicked_row, clicked_col)
                             dragger.save_initial(event.pos)
                             dragger.drag_piece(piece)
@@ -79,6 +84,7 @@ class Main:
                                 board.move(dragger.piece, move)
                                 game.play_sound(captured)
                                 game.next_turn()
+                                game.update_game_state()
                                 # show methods
                                 game.show_bg(screen)
                                 game.show_pieces(screen)

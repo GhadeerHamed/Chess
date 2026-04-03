@@ -14,6 +14,7 @@ class Board:
         self._add_piece('black')
 
     def calc_moves(self, piece: Piece, row, col):
+        piece.clear_moves()
 
 
         def pawn_moves():
@@ -167,6 +168,12 @@ class Board:
         elif isinstance(piece, King):
             king_moves()
 
+        legal_moves = []
+        for move in piece.moves:
+            if not self.in_check_after_move(piece, move):
+                legal_moves.append(move)
+        piece.moves = legal_moves
+
     def move(self, piece: Piece, move: Move):
         initial = move.initial
         final = move.final
@@ -176,11 +183,137 @@ class Board:
         self.squares[final.row][final.col].piece = piece
         piece.moved = True
 
+        if isinstance(piece, Pawn):
+            self._check_promotion(piece, final)
+
         # clear valid moves
         piece.clear_moves()
 
         # Set last move
         self.last_move = move
+
+    def _check_promotion(self, piece, final):
+        if final.row == 0 or final.row == 7:
+            self.squares[final.row][final.col].piece = Queen(piece.color)
+
+    def in_check_after_move(self, piece: Piece, move: Move):
+        initial = move.initial
+        final = move.final
+
+        captured_piece = self.squares[final.row][final.col].piece
+        initial_moved_state = piece.moved
+
+        self.squares[initial.row][initial.col].piece = None
+        self.squares[final.row][final.col].piece = piece
+        piece.moved = True
+
+        in_check = self.is_in_check(piece.color)
+
+        self.squares[initial.row][initial.col].piece = piece
+        self.squares[final.row][final.col].piece = captured_piece
+        piece.moved = initial_moved_state
+
+        return in_check
+
+    def is_in_check(self, color):
+        king_row, king_col = self._find_king(color)
+        if king_row is None:
+            return False
+
+        enemy_color = 'black' if color == 'white' else 'white'
+        return self.is_square_attacked(king_row, king_col, enemy_color)
+
+    def has_any_legal_move(self, color):
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.squares[row][col].has_team_piece(color):
+                    piece = self.squares[row][col].piece
+                    self.calc_moves(piece, row, col)
+                    if piece.moves:
+                        return True
+        return False
+
+    def is_square_attacked(self, target_row, target_col, by_color):
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.squares[row][col].has_team_piece(by_color):
+                    piece = self.squares[row][col].piece
+                    if self._piece_attacks_square(piece, row, col, target_row, target_col):
+                        return True
+        return False
+
+    def _piece_attacks_square(self, piece, row, col, target_row, target_col):
+        if isinstance(piece, Pawn):
+            attack_row = row + piece.dir
+            return attack_row == target_row and abs(col - target_col) == 1
+
+        if isinstance(piece, Knight):
+            row_diff = abs(row - target_row)
+            col_diff = abs(col - target_col)
+            return (row_diff, col_diff) in [(2, 1), (1, 2)]
+
+        if isinstance(piece, King):
+            row_diff = abs(row - target_row)
+            col_diff = abs(col - target_col)
+            return max(row_diff, col_diff) == 1
+
+        if isinstance(piece, Bishop):
+            return self._is_clear_diagonal(row, col, target_row, target_col)
+
+        if isinstance(piece, Rook):
+            return self._is_clear_straight(row, col, target_row, target_col)
+
+        if isinstance(piece, Queen):
+            return self._is_clear_straight(row, col, target_row, target_col) or self._is_clear_diagonal(row, col, target_row, target_col)
+
+        return False
+
+    def _is_clear_straight(self, row, col, target_row, target_col):
+        if row != target_row and col != target_col:
+            return False
+
+        if row == target_row:
+            step = 1 if target_col > col else -1
+            for current_col in range(col + step, target_col, step):
+                if self.squares[row][current_col].has_piece():
+                    return False
+            return True
+
+        step = 1 if target_row > row else -1
+        for current_row in range(row + step, target_row, step):
+            if self.squares[current_row][col].has_piece():
+                return False
+        return True
+
+    def _is_clear_diagonal(self, row, col, target_row, target_col):
+        row_diff = target_row - row
+        col_diff = target_col - col
+
+        if abs(row_diff) != abs(col_diff):
+            return False
+
+        row_step = 1 if row_diff > 0 else -1
+        col_step = 1 if col_diff > 0 else -1
+        current_row = row + row_step
+        current_col = col + col_step
+
+        while current_row != target_row and current_col != target_col:
+            if self.squares[current_row][current_col].has_piece():
+                return False
+            current_row += row_step
+            current_col += col_step
+
+        return True
+
+    def _find_king(self, color):
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.squares[row][col].has_team_piece(color):
+                    piece = self.squares[row][col].piece
+                    if isinstance(piece, King):
+                        return row, col
+
+        return None, None
 
     def valid_move(self, piece, move):
         return move in piece.moves
