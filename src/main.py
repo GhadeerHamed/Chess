@@ -21,8 +21,9 @@ class Main:
         board = game.board
 
         while True:
-            if game.should_make_ai_move() and not dragger.dragging:
-                game.make_ai_move()
+            now_ms = pygame.time.get_ticks()
+            if game.should_make_ai_move(now_ms) and not dragger.dragging:
+                game.make_ai_move(screen)
                 board = game.board
 
             if game.game_over:
@@ -145,6 +146,10 @@ class Main:
                         game.change_theme()
                     if event.key == pygame.K_c:
                         game.toggle_ai_mode()
+                    if event.key == pygame.K_a:
+                        game.cycle_ai_algorithm()
+                    if event.key == pygame.K_d:
+                        game.cycle_ai_depth()
                     if event.key == pygame.K_r:
                         game.reset()
                         game = self.game

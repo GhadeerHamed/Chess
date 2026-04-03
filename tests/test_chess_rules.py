@@ -249,13 +249,45 @@ class TestChessRules(unittest.TestCase):
         game = Game()
         game.vs_ai = True
         game.next_player = 'black'
+        surface = pygame.Surface((600, 600))
 
         before_moves = len(game.board.move_history)
-        game.make_ai_move()
+        game.make_ai_move(surface)
 
         self.assertEqual(game.next_player, 'white')
         self.assertEqual(len(game.board.move_history), before_moves + 1)
         pygame.quit()
+
+    def test_minimax_prefers_major_capture(self):
+        board = Board()
+        board._create()
+
+        board.squares[7][4].piece = King('white')
+        board.squares[0][4].piece = King('black')
+        board.squares[4][4].piece = Queen('white')
+        board.squares[3][4].piece = Queen('black')
+        board.squares[2][4].piece = Pawn('black')
+
+        ai = AI('white', algorithm='minimax', depth=2)
+        piece, move = ai.choose_move(board)
+
+        self.assertEqual(piece.color, 'white')
+        self.assertEqual((move.final.row, move.final.col), (3, 4))
+
+    def test_ai_algorithm_and_depth_controls(self):
+        ai = AI('black', algorithm='minimax', depth=2)
+        self.assertEqual(ai.get_algorithm(), 'minimax')
+        self.assertEqual(ai.get_search_depth(), 2)
+
+        ai.set_search_depth(3)
+        self.assertEqual(ai.get_search_depth(), 3)
+
+        ai.set_algorithm('greedy')
+        self.assertEqual(ai.get_algorithm(), 'greedy')
+
+        algorithms = ai.get_algorithms()
+        self.assertIn('greedy', algorithms)
+        self.assertIn('minimax', algorithms)
 
 
 if __name__ == '__main__':
