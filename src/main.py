@@ -27,8 +27,10 @@ class Main:
                 pygame.display.set_caption(f'Chess - {game.next_player.capitalize()} to move')
 
             game.show_bg(screen)
+            game.show_last_move(screen)
             game.show_moves(screen)
             game.show_pieces(screen)
+            game.show_hover(screen)
 
             if dragger.dragging:
                 dragger.update_blit(screen)
@@ -52,8 +54,10 @@ class Main:
                             dragger.drag_piece(piece)
                             # show methods
                             game.show_bg(screen)
+                            game.show_last_move(screen)
                             game.show_moves(screen)
                             game.show_pieces(screen)
+                            game.show_hover(screen)
 
                 elif event.type == pygame.MOUSEMOTION:
                     motion_row = event.pos[1] // SQSIZE
@@ -64,8 +68,10 @@ class Main:
                     if dragger.dragging:
                         dragger.update_mouse(event.pos)
                         game.show_bg(screen)
+                        game.show_last_move(screen)
                         game.show_moves(screen)
                         game.show_pieces(screen)
+                        game.show_hover(screen)
                         dragger.update_blit(screen)
 
                 elif event.type == pygame.MOUSEBUTTONUP:
@@ -92,7 +98,9 @@ class Main:
                                 game.update_game_state()
                                 # show methods
                                 game.show_bg(screen)
+                                game.show_last_move(screen)
                                 game.show_pieces(screen)
+                                game.show_hover(screen)
 
                     dragger.undrag_piece()
 

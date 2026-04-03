@@ -6,6 +6,17 @@
 * Run game: `py src/main.py`
 * Press 't' to change theme (green, brown, blue, gray)
 * Press 'r' to restart the game
+* Run tests: `py -m unittest discover -s tests -v`
+
+## Implemented Features
+
+- Turn enforcement (white/black alternate)
+- Check, checkmate, and stalemate detection
+- Castling (both sides when legal)
+- En passant (including one-move eligibility)
+- Pawn promotion (auto-promote to queen)
+- Last-move highlight and square hover outline
+- Board coordinates on all themes
 
 # Game Snapshots
 

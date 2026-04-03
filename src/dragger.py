@@ -11,15 +11,19 @@ class Dragger:
         self.mouseY = 0
         self.initial_row = 0
         self.initial_col = 0
+        self.texture_cache = {}
+
+    def _get_cached_texture(self, piece, size):
+        piece.set_texture(size=size)
+        texture_path = piece.texture
+        if texture_path not in self.texture_cache:
+            self.texture_cache[texture_path] = pygame.image.load(texture_path)
+        return self.texture_cache[texture_path]
 
     # blit method
 
     def update_blit(self, surface):
-        # texture
-        self.piece.set_texture(size=128)
-        texture = self.piece.texture
-        # img
-        img = pygame.image.load(texture)
+        img = self._get_cached_texture(self.piece, 128)
         # rect
         img_center = (self.mouseX, self.mouseY)
         self.piece.texture_rect = img.get_rect(center=img_center)
